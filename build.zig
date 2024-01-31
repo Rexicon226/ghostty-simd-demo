@@ -3,7 +3,9 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
-    // Features
+    // Just mock up a couple of targets to try.
+
+    // This is just a baseline x86_64.
     const baseline_target = std.Target.Query{
         .abi = .gnu,
         .cpu_arch = .x86_64,
@@ -13,6 +15,7 @@ pub fn build(b: *std.Build) void {
     const avx2: std.Target.x86.Feature = .avx2;
     avx2_feature.addFeature(@intFromEnum(avx2));
 
+    // baseline+avx2
     const avx2_target = std.Target.Query{
         .abi = .gnu,
         .cpu_arch = .x86_64,
@@ -24,6 +27,7 @@ pub fn build(b: *std.Build) void {
         .{ "avx2", avx2_target },
     };
 
+    // This is in baseline, because avx2 is added later.
     const exe = b.addExecutable(.{
         .name = "poc",
         .root_source_file = .{ .path = "src/main.zig" },
@@ -31,10 +35,10 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Ghostty links libc which causes it to use DlDynLib, which we will emulate here.
     exe.linkLibC();
 
     // Libs
-    const setup_step = b.step("setup", "");
     inline for (targets) |target| {
         const lib = b.addSharedLibrary(.{
             .name = target[0],
@@ -42,13 +46,13 @@ pub fn build(b: *std.Build) void {
             .target = b.resolveTargetQuery(target[1]),
             .optimize = optimize,
         });
-        setup_step.dependOn(&lib.step);
+
+        // Could probably improve naming.
+        // This causes `lib` to become a dependency of exe just saying.
         exe.root_module.addAnonymousImport(b.fmt("{s}_path", .{target[0]}), .{
             .root_source_file = lib.getEmittedBin(),
         });
     }
-
-    exe.step.dependOn(setup_step);
 
     b.installArtifact(exe);
 
